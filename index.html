@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+
+    <title>Smarties Sorter</title>
+    <style>
+      div.box {
+        color: #fca5a5;
+        font-weight: bold;
+        margin: auto;
+        margin-top: -15px;
+        position: relative;
+        width: 80px;
+        height: 150px;
+        border: 4px dashed #fca5a5;
+        border-radius: 10px;
+        font-family: "Lucida Console", Courier, monospace;
+      }
+      div.smartiesL {
+        margin-left: 5rem;
+        color: #fca5a5;
+        background-color: white;
+        font-weight: bold;
+        height: 40px;
+        /* margin: auto; */
+        /* position: absolute; */
+        /* width: 30%; */
+        border: 3px solid #fca5a5;
+        border-radius: 10px;
+        font-family: "Lucida Console", Courier, monospace;
+      }
+      div.smartiesR {
+        margin-right: 5rem;
+        color: #fca5a5;
+        background-color: white;
+        font-weight: bold;
+        /* margin: auto; */
+        /* position: absolute; */
+        /* width: 40%; */
+        border: 3px solid #fca5a5;
+        border-radius: 10px;
+        font-family: "Lucida Console", Courier, monospace;
+      }
+      #progressBar {
+        margin-left: 5rem;
+        margin-right: 5rem;
+
+        color: #fca5a5;
+        /* background-color: white; */
+        font-weight: bold;
+        /* margin: auto; */
+        position: relative;
+        /* width: 40%; */
+        /* margin-top: %; */
+        height: 30px;
+        content: center;
+        border: 3px solid whitesmoke;
+        border-radius: 10px;
+        font-family: "Lucida Console", Courier, monospace;
+      }
+      #barLeft {
+        /* margin-top: auto; */
+        height: 30px;
+        right: 50%;
+        position: absolute;
+        background-color: #fca5a5;
+        /* border: 3px solid whitesmoke; */
+        border-top-left-radius: 10px;
+        border-bottom-left-radius: 10px;
+        /* text-align: end; */
+      }
+      #barRight {
+        height: 30px;
+        left: 51%;
+        position: absolute;
+        background-color: #fca5a5;
+        border-top-right-radius: 10px;
+        border-bottom-right-radius: 10px;
+        /* text-align: start; */
+      }
+      #vl {
+        border-left: 6px solid black;
+        height: 45px;
+        position: absolute;
+        left: 50%;
+        margin-left: -3px;
+        top: -5px;
+      }
+    </style>
+  </head>
+  <body style="background-color: #fecaca">
+    <div class="box"></div>
+    <div
+      style="
+        display: flex;
+        flex-wrap: grid;
+        margin-top: 10%;
+        font-size: 1.875rem; /* 30px */
+        line-height: 2.25rem; /* 36px */
+      "
+    >
+      <div class="smartiesL" style="flex: 10%">Smarties hell</div>
+      <div style="flex: 30%">
+        <div id="progressBar">
+          <div id="barLeft"></div>
+          <div id="vl"></div>
+          <div id="barRight"></div>
+        </div>
+      </div>
+      <div class="smartiesR" style="flex: 10%">Smarties dunkel</div>
+    </div>
+    <div style="display: flex; justify-content: center">
+      <div
+        id="webcam-container"
+        style="
+          display: flex;
+          justify-content: center;
+          /* margin-top: 10%;
+          margin-left: 45%; */
+          width: 14%;
+          border: 5px solid whitesmoke;
+          border-radius: 10px;
+        "
+      ></div>
+    </div>
+
+    <div id="label-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script>
+      const URL = "https://teachablemachine.withgoogle.com/models/PjFu27HTq/";
+
+      let model, webcam, labelContainer, maxPredictions;
+    </script>
+    <script>
+      window.addEventListener("load", function () {
+        init();
+      });
+
+      async function init() {
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        const flip = true; // whether to flip the webcam
+        webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
+        await webcam.setup(); // request access to the webcam
+        await webcam.play();
+        window.requestAnimationFrame(loop);
+
+        // append elements to the DOM
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+        labelContainer = document.getElementById("label-container");
+        progressBar = document.getElementById("progressBar");
+        progressL = document.getElementById("barLeft");
+        progressR = document.getElementById("barRight");
+
+        for (let i = 0; i < maxPredictions; i++) {
+          // and class labels
+          labelContainer.appendChild(document.createElement("div"));
+        }
+      }
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function loop() {
+        webcam.update(); // update the webcam frame
+        await predict();
+        window.requestAnimationFrame(loop);
+      }
+
+      async function predict() {
+        var socket = io();
+        const prediction = await model.predict(webcam.canvas);
+        for (let i = 0; i < maxPredictions; i++) {
+          const probability = prediction[i].probability;
+          const percentage = (probability * 100).toFixed(0);
+          const classPrediction = `${prediction[i].className}: ${percentage}%`;
+          labelContainer.childNodes[i].innerHTML = classPrediction;
+          labelContainer.childNodes[i].style.fontSize = `${percentage}px`;
+
+          // if (percentage == 100) {
+          //   console.log("100");
+          //   socket.emit("lights", { status: "0" });
+          // }
+
+          // Map the percentage to the progress bar
+          if (progressBar) {
+            if (i == 0) {
+              progressL.style.width = `calc(50% * ${probability})`;
+              if (probability >= 0.95) {
+                socket.emit("smarties", { status: "0" });
+                await sleep(4000);
+                // setTimeout(() => {
+                console.log("Smarties hell");
+                // }, 3000);
+              }
+            }
+
+            if (i == 1) {
+              progressR.style.width = `calc(49% * ${probability}`;
+              if (probability >= 0.95) {
+                socket.emit("smarties", { status: "1" });
+                await sleep(4000);
+                // setTimeout(() => {
+                console.log("Smarties dunkel");
+                // }, 3000);
+              }
+            }
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
